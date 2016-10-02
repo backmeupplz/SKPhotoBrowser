@@ -17,16 +17,22 @@ import UIKit
     func checkCache()
 }
 
+public protocol SKPhotoDownloader: class {
+    func load(key: String, completion:@escaping(UIImage?, NSError?)->())
+}
+
 // MARK: - SKPhoto
 open class SKPhoto: NSObject, SKPhotoProtocol {
     
     open var underlyingImage: UIImage!
     open var photoURL: String!
+    open var photoKey: String!
+    open var delegate: SKPhotoDownloader?
     open var contentMode: UIViewContentMode = .scaleAspectFill
     open var shouldCachePhotoURLImage: Bool = false
     open var caption: String!
     open var index: Int = 0
-
+    
     override init() {
         super.init()
     }
@@ -45,6 +51,12 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
         self.init()
         photoURL = url
         underlyingImage = holder
+    }
+    
+    convenience init(key: String, delegate: SKPhotoDownloader?) {
+        self.init()
+        photoKey = key
+        self.delegate = delegate
     }
     
     open func checkCache() {
@@ -103,12 +115,24 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
                         }
                         session.finishTasksAndInvalidate()
                     }
-                })
+                    })
                 task.resume()
             }
         }
+        
+        if let photoKey = photoKey {
+            delegate?.load(key: photoKey)
+            { image, error in
+                if error != nil {
+                    self.loadUnderlyingImageComplete()
+                } else {
+                    self.underlyingImage = image
+                    self.loadUnderlyingImageComplete()
+                }
+            }
+        }
     }
-
+    
     open func loadUnderlyingImageComplete() {
         NotificationCenter.default.post(name: Notification.Name(rawValue: SKPHOTO_LOADING_DID_END_NOTIFICATION), object: self)
     }
@@ -118,6 +142,10 @@ open class SKPhoto: NSObject, SKPhotoProtocol {
 // MARK: - Static Function
 
 extension SKPhoto {
+    public static func photo(key: String, delegate: SKPhotoDownloader? = nil) -> SKPhoto {
+        return SKPhoto(key: key, delegate: delegate)
+    }
+    
     public static func photoWithImage(_ image: UIImage) -> SKPhoto {
         return SKPhoto(image: image)
     }
